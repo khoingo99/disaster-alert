@@ -6,7 +6,7 @@ const path = require("path");
 
 const app = express();
 app.use(cors());
-
+app.use(express.static(__dirname));
 let globalCache = { data: [], lastUpdate: null };
 
 async function fetchSevenDaysData() {
