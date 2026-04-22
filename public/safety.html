@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>🚨 실시간 종합 재난문자 모니터링</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard-dynamic-subset.css">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <style>
+        :root { --primary: #d32f2f; --secondary: #004a99; --bg: #f8f9fa; --border: #dee2e6; }
+        body { font-family: 'Pretendard', sans-serif; background: var(--bg); margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.05); }
+        
+        .header { border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        
+        /* Filter Panel Styles */
+        .filter-panel { background: #f1f3f5; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .filter-title { font-weight: bold; margin-bottom: 10px; display: flex; justify-content: space-between; }
+        .filter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+        .filter-item { display: flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; padding: 5px; border-radius: 4px; transition: 0.2s; }
+        .filter-item:hover { background: #e9ecef; }
+        .filter-item input { cursor: pointer; }
+
+        .btn-small { padding: 4px 8px; font-size: 11px; cursor: pointer; border: 1px solid #ccc; background: #fff; border-radius: 3px; }
+
+        .info-bar { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; color: #555; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        th { background: #f8f9fa; padding: 12px; font-size: 13px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+        td { padding: 14px 10px; border-bottom: 1px solid #eee; text-align: center; font-size: 14px; }
+        
+        .col-type { font-weight: bold; color: var(--primary); display: flex; align-items: center; justify-content: center; gap: 4px; }
+        .col-content { text-align: left; line-height: 1.5; word-break: keep-all; }
+        .region { color: var(--secondary); font-weight: bold; }
+        .new-tag { background: var(--secondary); color: #fff; font-size: 10px; padding: 2px 4px; border-radius: 3px; margin-left: 5px; }
+
+        .pagination { display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 25px; }
+        .nav-btn { padding: 8px 16px; border: 1px solid #ccc; background: #fff; cursor: pointer; border-radius: 4px; font-weight: bold; }
+        .nav-btn:disabled { color: #ccc; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1 style="margin:0; font-size:22px;">🚨 실시간 재난문자 발령 현황</h1>
+        <div id="clock" style="font-weight:bold; color:var(--secondary)"></div>
+    </div>
+
+    <div class="filter-panel">
+        <div class="filter-title">
+            <span>재해구분 필터 (다중 선택 가능)</span>
+            <div>
+                <button class="btn-small" onclick="toggleAll(true)">전체 선택</button>
+                <button class="btn-small" onclick="toggleAll(false)">전체 해제</button>
+            </div>
+        </div>
+        <div class="filter-grid" id="filterGrid">
+            </div>
+    </div>
+
+    <div class="info-bar">
+        <div>검색 결과: <b id="totalCount" style="color:var(--primary)">0</b>건</div>
+        <div id="updateTime">최근 업데이트: -</div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 130px;">재해구분명</th>
+                <th>내용 (지역)</th>
+                <th style="width: 170px;">등록일</th>
+            </tr>
+        </thead>
+        <tbody id="list">
+            <tr><td colspan="3" style="padding:100px;">데이터를 불러오는 중입니다...</td></tr>
+        </tbody>
+    </table>
+
+    <div class="pagination">
+        <button id="btnPrev" class="nav-btn" onclick="changePage(-1)">이전</button>
+        <span id="pageDisplay" style="font-weight:bold">1 / 1</span>
+        <button id="btnNext" class="nav-btn" onclick="changePage(1)">다음</button>
+    </div>
+</div>
+
+<script>
+    const types = ["AI", "가뭄", "가축질병", "강풍", "건조", "교통", "교통사고", "교통통제", "금융", "기타", "대설", "미세먼지", "민방공", "붕괴", "산불", "산사태", "수도", "안개", "에너지", "전염병", "정전", "지진", "지진해일", "태풍", "테러", "통신", "폭발", "폭염", "풍랑", "한파", "호우", "홍수", "화재", "환경오염사고", "황사"];
+    const iconMap = { "화재":"🔥", "산불":"🌲", "지진":"🌋", "태풍":"🌪️", "호우":"🌧️", "미세먼지":"🌫️", "교통":"🚗", "가축질병":"🐄", "폭염":"☀️", "한파":"❄️" };
+
+    let allData = [], filteredData = [], currPage = 1;
+    const pageSize = 10;
+
+    function initFilters() {
+        const grid = document.getElementById('filterGrid');
+        grid.innerHTML = types.map(t => `
+            <label class="filter-item">
+                <input type="checkbox" value="${t}" checked onchange="applyFilter()"> ${t}
+            </label>
+        `).join('');
+    }
+
+    async function loadData() {
+        try {
+            const res = await fetch('/api/safety');
+            allData = await res.json();
+            document.getElementById('updateTime').innerText = `최근 업데이트: ${new Date().toLocaleTimeString()}`;
+            applyFilter();
+        } catch (e) { console.error("Data load error"); }
+    }
+
+    function applyFilter() {
+        const checked = Array.from(document.querySelectorAll('#filterGrid input:checked')).map(i => i.value);
+        filteredData = allData.filter(item => checked.some(t => item.DST_SE_NM.includes(t)));
+        currPage = 1;
+        render();
+    }
+
+    function toggleAll(status) {
+        document.querySelectorAll('#filterGrid input').forEach(i => i.checked = status);
+        applyFilter();
+    }
+
+    function render() {
+        const tbody = document.getElementById('list');
+        const lastPage = Math.ceil(filteredData.length / pageSize) || 1;
+        document.getElementById('totalCount').innerText = filteredData.length.toLocaleString();
+        document.getElementById('pageDisplay').innerText = `${currPage} / ${lastPage}`;
+        document.getElementById('btnPrev').disabled = currPage <= 1;
+        document.getElementById('btnNext').disabled = currPage >= lastPage;
+
+        const start = (currPage - 1) * pageSize;
+        const paged = filteredData.slice(start, start + pageSize);
+
+        tbody.innerHTML = paged.length ? paged.map(i => {
+            let icon = "⚠️";
+            for(let k in iconMap) if(i.DST_SE_NM.includes(k)) icon = iconMap[k];
+            return `
+                <tr>
+                    <td><div class="col-type"><span>${icon}</span> ${i.DST_SE_NM}</div></td>
+                    <td class="col-content">${i.MSG_CN} <span class="region">[${i.RCPTN_RGN_NM}]</span> <span class="new-tag">N</span></td>
+                    <td style="color:#666; font-size:13px;">${i.CRT_DT}</td>
+                </tr>
+            `;
+        }).join('') : '<tr><td colspan="3" style="padding:100px;">조건에 맞는 데이터가 없습니다.</td></tr>';
+    }
+
+    function changePage(s) { currPage += s; render(); window.scrollTo(0,0); }
+    
+    setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleString('ko-KR'); }, 1000);
+    window.onload = () => { initFilters(); loadData(); };
+</script>
+</body>
+</html>

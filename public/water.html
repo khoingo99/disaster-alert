@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>평택시 실시간 수위 정보</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2">
+    <style>
+        :root { --primary: #004a99; --danger: #e31b23; --success: #2e7d32; --bg: #f8f9fa; }
+        body { font-family: 'Pretendard', sans-serif; background-color: var(--bg); padding: 20px; margin: 0; }
+        .container { max-width: 1200px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: var(--primary); margin-bottom: 5px; font-weight: 800; }
+        .subtitle { text-align: center; color: #666; font-size: 0.9em; margin-bottom: 20px; }
+        
+        .export-container { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; }
+        .export-container input { padding: 5px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; }
+        .btn-excel { background-color: #1d6f42; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 12px; transition: 0.2s; }
+        .btn-excel:disabled { background-color: #ccc; cursor: not-allowed; }
+
+        .info-bar { display: flex;align-items: center; justify-content: space-between; background: #fff;  font-size: 14px; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { background-color: var(--primary); color: white; padding: 12px 5px; border: 1px solid #ddd; }
+        td { padding: 12px 5px; text-align: center; border: 1px solid #ddd; }
+        tr:nth-child(even) { background-color: #fcfcfc; }
+        
+        .text-safe { color: var(--success); font-weight: bold; }
+        .text-warn { color: var(--danger); font-weight: bold; }
+        .status-normal { color: var(--success); font-weight: bold; }
+        .status-danger { background-color: var(--danger); color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; }
+        footer { margin-top: 40px; text-align: center; font-size: 13px; color: #888; border-top: 1px solid #eee; padding-top: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🌊 평택시 관측소별 실시간 수위 현황</h2>
+    <p class="subtitle">한강홍수통제소(HRFCO) 제공 실시간 데이터 모니터링</p>
+    <div class="info-bar">
+        <div>⏳ 자동 갱신까지: <span id="countdown" style="color: #d9480f; font-weight: bold;">10:00</span></div>
+        <div class="export-container">
+        <span>조회 기간 (최대 7일, 1시간 단위):</span>
+        <input type="date" id="startDate">
+        <span>~</span>
+        <input type="date" id="endDate">
+        <button id="excelBtn" class="btn-excel" onclick="downloadHistoryExcel()">📊 엑셀 저장</button>
+    </div>
+    </div>
+    <table id="waterTable">
+        <thead>
+            <tr>
+                <th>수위 관측소 명칭</th>
+                <th>데이터 기준 시간</th>
+                <th>현재 수위 (m)</th>
+                <th>홍수 주의보 (m)</th>
+                <th>홍수 경보 (m)</th>
+                <th>현재 유량 (m³/s)</th>
+                <th>현재 상태</th>
+            </tr>
+        </thead>
+        <tbody id="dataBody"></tbody>
+    </table>
+    <footer>
+        <p style="font-weight: bold; color: #666;">Made by 기업부설연구소</p>
+        <p>Copyright © (주)비전정보통신 All Rights Reserved.</p>
+    </footer>
+</div>
+
+<script>
+    const stationIds = ["1101635", "1101665", "1101670", "1101675", "1101680", "1101685", "1101690", "1101695", "1101696", "1101663"];
+    const stationNm = ["군문교", "회화리", "동연교", "궁안교", "팽성대교", "아산호", "노양리", "아산만(내)", "아산만(외)", "진위1교"];
+    let infoMap = {};
+
+    // 날짜 제한 설정
+    const startDateInput = document.getElementById('startDate');
+    const endDateInput = document.getElementById('endDate');
+    const today = new Date().toISOString().split('T')[0];
+
+    endDateInput.value = today;
+    endDateInput.max = today;
+    startDateInput.value = today;
+    startDateInput.max = today;
+
+    
+    startDateInput.addEventListener('change', () => {
+    endDateInput.min = startDateInput.value;
+    let maxDate = new Date(startDateInput.value);
+    maxDate.setDate(maxDate.getDate() + 7);
+    let maxDateStr = maxDate.toISOString().split('T')[0];
+    
+    const todayStr = new Date().toISOString().split('T')[0];
+    endDateInput.max = (maxDateStr > todayStr) ? todayStr : maxDateStr;
+
+    if (endDateInput.value > endDateInput.max || endDateInput.value < endDateInput.min) {
+        endDateInput.value = endDateInput.max;
+    }
+});
+
+    async function downloadHistoryExcel() {
+        const btn = document.getElementById('excelBtn');
+        const startStr = startDateInput.value.replace(/-/g, "") + "00";
+        const endStr = endDateInput.value.replace(/-/g, "") + "23";
+        
+        btn.disabled = true;
+        btn.innerText = "⏳ 처리 중...";
+
+        try {
+            let finalExcelData = [];
+            
+            for (let i = 0; i < stationIds.length; i++) {
+                const id = stationIds[i];
+                const name = stationNm[i];
+                const info = infoMap[id] || {};
+                const res = await fetch(`https://api.hrfco.go.kr/CFFA7DB1-9FF4-48FF-BE0B-FCD6DAE39F91/waterlevel/list/1H/${id}/${startStr}/${endStr}.json`);
+                const data = await res.json();
+                
+                if (data.content && data.content.length > 0) {
+                   data.content.forEach(item => {
+                    const wl = (item.wl && item.wl !== "null") ? parseFloat(item.wl).toFixed(2) : "NaN";
+                    const fw = (item.fw && item.fw.trim() !== "" && item.fw !== "null") ? parseFloat(item.fw).toFixed(2) : "NaN";
+                    
+                    const almwl = (info.almwl && info.almwl !== "null") ? parseFloat(info.almwl) : null;
+                    
+                    let status = "정상";
+                    if (wl === "NaN") {
+                        status = "NaN";
+                    } else if (almwl !== null && parseFloat(wl) >= almwl) {
+                        status = "위험";
+                    }
+
+                    finalExcelData.push({
+                        "수위 관측소 명칭": name,
+                        "데이터 기준 시간": parseToExcelDate(item.ymdhm),
+                        "현재 수위 (m)": wl,
+                        "홍수 주의보 (m)": (info.almwl && info.almwl !== "null") ? parseFloat(info.almwl).toFixed(2) : "NaN",
+                        "홍수 경보 (m)": (info.wrnwl && info.wrnwl !== "null") ? parseFloat(info.wrnwl).toFixed(2) : "NaN",
+                        "현재 유량 (m³/s)": fw,
+                        "현재 상태": status
+                    });
+                });
+                } else {
+                    finalExcelData.push({
+                        "수위 관측소 명칭": name,
+                        "데이터 기준 시간": `${startDateInput.value} ~ ${endDateInput.value}`,
+                        "현재 수위 (m)": "데이터 없음",
+                        "홍수 주의보 (m)": (info.almwl && info.almwl !== "null") ? parseFloat(info.almwl).toFixed(2) : "NaN",
+                        "홍수 경보 (m)": (info.wrnwl && info.wrnwl !== "null") ? parseFloat(info.wrnwl).toFixed(2) : "NaN",
+                        "현재 유량 (m³/s)": "NaN",
+                        "현재 상태": "-"
+                    });
+                }
+            }
+
+            const ws = XLSX.utils.json_to_sheet(finalExcelData, { cellDates: true });
+
+const range = XLSX.utils.decode_range(ws['!ref']);
+for (let i = range.s.r + 1; i <= range.e.r; i++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: i, c: 1 }); // Cột B
+    if (!ws[cellAddress] || ws[cellAddress].v === "NaN") continue;
+    
+    ws[cellAddress].z = 'yyyy-mm-dd hh:mm'; 
+}
+ws['!cols'] = [
+    { wch: 18 },  
+    { wch: 20 }, 
+    { wch: 12 }, 
+    { wch: 15 }, 
+    { wch: 15 }, 
+    { wch: 15 }, 
+    { wch: 12 }  
+];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "수위데이터");
+            XLSX.writeFile(wb, `평택_수위현황_${startStr.substring(0,8)}.xlsx`);
+
+        } catch (e) {
+            alert("엑셀 생성 중 오류가 발생했습니다.");
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "📊 엑셀 저장";
+        }
+    }
+
+    async function updateData() {
+        try {
+            const infoRes = await fetch("https://api.hrfco.go.kr/CFFA7DB1-9FF4-48FF-BE0B-FCD6DAE39F91/waterlevel/info.json");
+            const infoData = await infoRes.json();
+            infoData.content.forEach(item => { infoMap[item.wlobscd] = item; });
+
+            const requests = stationIds.map(id => fetch(`https://api.hrfco.go.kr/CFFA7DB1-9FF4-48FF-BE0B-FCD6DAE39F91/waterlevel/list/10M/${id}.json`).then(res => res.json()));
+            const results = await Promise.all(requests);
+            
+            const tableBody = document.getElementById("dataBody");
+            tableBody.innerHTML = "";
+
+            results.forEach((data, index) => {
+                const id = stationIds[index], latest = data.content?.[0], info = infoMap[id] || {};
+                const almwl = (info.almwl && info.almwl !== "null") ? parseFloat(info.almwl).toFixed(2) : "NaN";
+                const wrnwl = (info.wrnwl && info.wrnwl !== "null") ? parseFloat(info.wrnwl).toFixed(2) : "NaN";
+                const wlValue = (latest && latest.wl) ? parseFloat(latest.wl) : null;
+                const fwValue = (latest && latest.fw && latest.fw.trim() !== "") ? parseFloat(latest.fw).toFixed(2) : "NaN";
+                
+                let statusText = "정상", wlClass = "text-safe";
+                if (wlValue !== null && almwl !== "NaN" && wlValue >= parseFloat(almwl)) {
+                    statusText = "위험"; wlClass = "text-warn";
+                }
+
+                const row = document.createElement("tr");
+                row.innerHTML = latest ? `
+                    <td style="font-weight:bold">${stationNm[index]}</td>
+                    <td style="color:#666">${formatDate(latest.ymdhm)}</td>
+                    <td class="${wlClass}">${wlValue.toFixed(2)}</td>
+                    <td>${almwl}</td><td>${wrnwl}</td><td>${fwValue}</td>
+                    <td><span class="${statusText==='위험'?'status-danger':'status-normal'}">${statusText}</span></td>
+                ` : `<td style="font-weight:bold">${stationNm[index]}</td><td colspan="6" style="color:#ccc">데이터 없음</td>`;
+                tableBody.appendChild(row);
+            });
+            timer = 600;
+        } catch (e) { console.error(e); }
+    }
+
+    function formatDate(str) {
+    if (!str || str.length < 12) return str;
+    return `${str.substring(0,4)}-${str.substring(4,6)}-${str.substring(6,8)} ${str.substring(8,10)}:${str.substring(10,12)}`;
+}
+function parseToExcelDate(str) {
+    if (!str || str.length < 12) return str;
+    const year = str.substring(0, 4);
+    const month = str.substring(4, 6) - 1; 
+    const day = str.substring(6, 8);
+    const hour = str.substring(8, 10);
+    const min = str.substring(10, 12);
+    return new Date(year, month, day, hour, min);
+}
+
+    let timer = 600;
+    setInterval(() => {
+        timer--;
+        document.getElementById("countdown").innerText = `${Math.floor(timer/60)}:${(timer%60).toString().padStart(2,'0')}`;
+        if (timer <= 0) updateData();
+    }, 1000);
+
+    updateData();
+</script>
+</body>
+</html>

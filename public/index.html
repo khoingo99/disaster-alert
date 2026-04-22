@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>비전정보통신 - Safety Portal</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard-dynamic-subset.css">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2">
+    
+    <style>
+        :root {
+            --primary-color: #004a99;
+            --accent-color: #d32f2f;
+            --bg-color: #f4f7f9;
+        }
+
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* Main Content */
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .welcome-text {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .welcome-text h1 {
+            font-size: 2.5rem;
+            color: #212529;
+            margin-bottom: 10px;
+        }
+
+        /* Menu Grid */
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            width: 100%;
+            max-width: 900px;
+        }
+
+        .menu-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 40px 20px;
+            text-align: center;
+            text-decoration: none;
+            color: inherit;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+            border: 1px solid #eee;
+        }
+
+        .menu-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+            border-color: var(--primary-color);
+        }
+
+        .icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        .menu-card h2 {
+            font-size: 22px;
+            margin: 10px 0;
+            color: #333;
+        }
+
+        .menu-card p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        /* Footer theo yêu cầu của bạn */
+        footer {
+            background: #fff;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #dee2e6;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .made-by {
+            font-weight: bold;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .copyright {
+            color: #888;
+            margin: 0;
+        }
+
+        @media (max-width: 600px) {
+            .menu-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <div class="welcome-text">
+            <h1>통합 재난 플랫폼</h1>
+            <p style="color: #6c757d;">실시간 데이터 모니터링 시스템에 오신 것을 환영합니다.</p>
+        </div>
+
+        <div class="menu-grid">
+            <a href="/safety" class="menu-card">
+                <span class="icon">🚨</span>
+                <h2>실시간 재난문자</h2>
+                <p>전국 재난문자 발령 현황 및 유형별 필터링</p>
+            </a>
+
+            <a href="/water" class="menu-card">
+                <span class="icon">💧</span>
+                <h2>실시간 수위 정보</h2>
+                <p>전국 주요 하천 및 댐 수위 데이터 모니터링</p>
+            </a>
+        </div>
+    </div>
+
+    <footer>
+        <p class="made-by">Made by 기업부설연구소</p>
+        <p class="copyright">Copyright © (주)비전정보통신 All Rights Reserved.</p>
+    </footer>
+
+</body>
+</html>

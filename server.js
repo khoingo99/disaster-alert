@@ -6,54 +6,55 @@ const path = require("path");
 
 const app = express();
 app.use(cors());
-app.use(express.static(__dirname));
+
+// Phục vụ các file tĩnh (CSS, JS, Icon) từ thư mục public
+app.use(express.static(path.join(__dirname, "public")));
+
 let globalCache = { data: [], lastUpdate: null };
 
+// --- LOGIC API CHO TIN NHẮN THẢM HỌA ---
 async function fetchSevenDaysData() {
     const serviceKey = "DOA1R6BS9785HK11";
     let rawData = [];
-    
     for (let i = 0; i < 7; i++) {
         const dateStr = moment().subtract(i, 'days').format('YYYYMMDD');
         const url = `https://www.safetydata.go.kr/V2/api/DSSP-IF-00247?serviceKey=${serviceKey}&crtDt=${dateStr}&pageNo=1&numOfRows=1000`;
         try {
             const resp = await axios.get(url, { timeout: 5000 });
             if (resp.data?.body) rawData = rawData.concat(resp.data.body);
-        } catch (e) { console.log(`Error at ${dateStr}`); }
+        } catch (e) { console.log(`Error fetching ${dateStr}`); }
     }
-
     const uniqueMap = new Map();
-    rawData.forEach(item => {
-        if (!uniqueMap.has(item.SN)) uniqueMap.set(item.SN, item);
-    });
-
-    let filtered = Array.from(uniqueMap.values())
-        .filter(item => item.DST_SE_NM !== "기타")
+    rawData.forEach(item => { if (!uniqueMap.has(item.SN)) uniqueMap.set(item.SN, item); });
+    let sorted = Array.from(uniqueMap.values())
         .sort((a, b) => new Date(b.CRT_DT.replace(/\//g, '-')).getTime() - new Date(a.CRT_DT.replace(/\//g, '-')).getTime());
-
-    globalCache = { data: filtered, lastUpdate: Date.now() };
-    return filtered;
+    globalCache = { data: sorted, lastUpdate: Date.now() };
+    return sorted;
 }
 
 app.get("/api/safety", async (req, res) => {
-    try {
-        const oneHour = 60 * 60 * 1000;
-        let data = globalCache.data;
-        if (data.length === 0 || (Date.now() - globalCache.lastUpdate > oneHour)) {
-            data = await fetchSevenDaysData();
-        }
-        const page = parseInt(req.query.page) || 1;
-        const pageSize = 10;
-        res.json({
-            items: data.slice((page - 1) * pageSize, page * pageSize),
-            totalCount: data.length,
-            currentPage: page,
-            lastPage: Math.ceil(data.length / pageSize)
-        });
-    } catch (err) {
-        res.status(500).json({ error: "서버 오류가 발생했습니다." });
+    const oneHour = 60 * 60 * 1000;
+    if (!globalCache.lastUpdate || (Date.now() - globalCache.lastUpdate > oneHour)) {
+        await fetchSevenDaysData();
     }
+    res.json(globalCache.data);
 });
 
-app.get("/", (req, res) => res.sendFile(path.join(__dirname, "index.html")));
-app.listen(3000, () => console.log(`🚀 http://localhost:3000`));
+// --- ĐIỀU HƯỚNG TRANG (ROUTES) ---
+
+// 1. Link trang chủ (Landing Page)
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// 2. Link trang Tin nhắn thảm họa
+app.get("/safety", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "safety.html"));
+});
+
+// 3. Link trang Mực nước
+app.get("/water", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "water.html"));
+});
+
+app.listen(3000, () => console.log(`🚀 Hệ thống chạy tại http://localhost:3000`));
